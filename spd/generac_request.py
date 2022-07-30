@@ -8,7 +8,7 @@ DVCS_MAP = {
     'STATE': 'st',
     'POWER': 'p',
     'TOTAL_ENERGY': 'et',
-    'UPDATE': 'up'
+    'UPDATE_TIME': 'up'
 }
 
 
@@ -41,13 +41,22 @@ class DashboardInfo:
         save_data(self.devices, file_path, file_name)
 
 
-class Data:
+class DeviceData:
 
-    def __init__(self, device_id):
+    def __init__(self, device_id: str, headers: dict):
         self.device_id = device_id
+        self.headers = headers
+        self.data = {}
 
-    def power(self):
-        pass
+    def power_data(self):
+        url = 'https://pwrcell.generac.com/power/{}/now/all.json'.format(f'{self.device_id}')
+        self.data = requests.get(url, headers=self.headers).json()
+        return self.data
 
-    def energy(self):
-        pass
+    def energy_data(self):
+        url = 'https://pwrcell.generac.com/energy/{}/now/all.json'.format(f'{self.device_id}')
+        self.data = requests.get(url, headers=self.headers).json()
+        return self.data
+
+    def save_file(self, file_path: str, file_name: str):
+        save_data(self.data, file_path, file_name)
