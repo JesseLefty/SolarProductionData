@@ -1,44 +1,33 @@
+from datetime import datetime, timedelta
 import time
 import json
 
-
-def date_to_epoch(date: str, hour: int = 0):
-    complete_date = f'{date}: {str(hour)}'
-    pattern = '%m-%d-%Y: %H'
-    return int(time.mktime(time.strptime(complete_date, pattern)))
+DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 
-def epoch_to_date(date: int):
-    return time.strftime("%d %b %Y %H:%M:%S", time.gmtime(date))
-
-
-
-
-#todo: figure out how class inheritance works
+def date_to_epoch(date: str):
+    return int(time.mktime(time.strptime(date, DATE_FORMAT)))
 
 
 class ProductionData:
 
     def __init__(self, data: list[list],
                  begin_date: str = '',
-                 end_date: str = '',
-                 begin_hour: int = 0,
-                 end_hour: int = 0):
+                 end_date: str = ''):
 
         self.data = data
-        if begin_date == '':
-            self.begin_time = 0
-        else:
-            self.begin_time = date_to_epoch(begin_date, begin_hour)
-        if end_date == '':
-            self.end_time = time.mktime(time.localtime())
-        else:
-            self.end_time = date_to_epoch(end_date, end_hour)
+        self.begin_time = begin_date
+        self.end_time = end_date
         self.zero_list = [None]
+        self.time = [datetime.fromtimestamp(t[0] // 1000).strftime(DATE_FORMAT) for t in self.data]
+        self.production = [i[1] for i in self.data]
+        self.bool = [i[2] for i in self.data]
         self.data_in_range = self._production_in_range()
-        self.time = [i[0] for i in self.data_in_range]
-        self.production = [i[1] for i in self.data_in_range]
-        self.bool = [i[2] for i in self.data_in_range]
+        self.time_in_range = [datetime.fromtimestamp(t[0] // 1000).strftime(DATE_FORMAT) for t in self.data_in_range]
+        self.production_in_range = [i[1] for i in self.data_in_range]
+        self.bool_in_range = [i[2] for i in self.data_in_range]
+        self.start_date_list = self.begin_time.split('-')
+        self.end_date_list = self.end_time.split('-')
 
     def count_zero(self):
         return len([i for i in self.production if i <= 0])
@@ -48,42 +37,53 @@ class ProductionData:
         return self.zero_list
 
     def _production_in_range(self):
-        return [i for i in self.data if self.begin_time*1000 <= i[0] < self.end_time*1000]
+        begin_date = date_to_epoch(self.begin_time)
+        end_date = date_to_epoch(self.end_time)
+        return [item for idx, item in enumerate(self.data) if begin_date <= date_to_epoch(self.time[idx]) <= end_date]
 
-    def max(self, with_date=False, epoch=True):
-        max_val = max([i for i in self.production])
+    def max(self, with_date=False):
+        max_val = max([i for i in self.production_in_range])
         if not with_date:
             return max_val
         else:
-            max_index = self.production.index(max_val)
-            date = self.time[max_index]
-            if not epoch:
-                date = epoch_to_date(date)
+            max_index = self.production_in_range.index(max_val)
+            date = self.time_in_range[max_index]
             return [date, max_val]
-#todo: fix the epoch_to_date conversion
 
-    def min(self, with_date=False, epoch=True):
-        min_val = min([i for i in self.production])
+    def min(self, with_date=False):
+        min_val = min([i for i in self.production_in_range])
         if not with_date:
             return min_val
         else:
-            min_index = self.production.index(min_val)
-            date = self.time[min_index]
-            if not epoch:
-                date = epoch_to_date(date)
+            min_index = self.production_in_range.index(min_val)
+            date = self.time_in_range[min_index]
             return [date, min_val]
 
-    def all_data(self, zeros=False, epoch=True):
+    def all_data(self):
         data_dict = {'Range': [self.begin_time, self.end_time],
-                     'Max': self.max(with_date=True, epoch=epoch),
-                     'Min': self.min(with_date=True, epoch=epoch),
+                     'Max': self.max(with_date=True),
+                     'Min': self.min(with_date=True),
                      'No Production': self.count_zero()}
-        if not epoch:
-            data_dict['Range'] = [epoch_to_date(self.begin_time), epoch_to_date(self.end_time)]
         return data_dict
 
-    def daily(self, zeros=False):
-        pass
+    def group_by_day(self):
+        start = datetime.strptime(self.begin_time.split(" ")[0], "%Y-%m-%d")
+        end = datetime.strptime(self.end_time.split(" ")[0], "%Y-%m-%d")
+        date_generated = [start + timedelta(days=x) for x in range(0, (end - start).days)]
+        days = {}
+        for date in date_generated:
+            day_list = []
+            for index, item in enumerate(self.time_in_range):
+                time_as_list = item.split('-')
+                year = int(time_as_list[0])
+                month = int(time_as_list[1])
+                day = int(time_as_list[2].split(" ")[0])
+                if datetime(year=year, month=month, day=day) > date:
+                    break
+                if datetime(year=year, month=month, day=day) == date:
+                    day_list.append(self.production_in_range[index])
+            days[datetime.strftime(date, DATE_FORMAT)] = day_list
+        return days
 
     def match_date(self, value: int):
         pass
@@ -98,6 +98,7 @@ with open(r'C:\Users\Jesse\Desktop\Solar Data\power test.json', 'r') as f:
     data = json.load(f)
 power_data = data['wh_per_hour']
 
-power = ProductionData(power_data, begin_date='05-10-2021', end_date='7-12-2022')
-print(power.max())
-print(power.all_data(epoch=False))
+power = ProductionData(power_data, begin_date='2022-06-10 20:00:00', end_date='2022-07-12 10:00:00')
+print(power.group_by_day())
+
+
